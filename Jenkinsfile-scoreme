@@ -1,0 +1,83 @@
+pipeline {
+    agent any
+
+    tools {
+        jdk 'jdk17'
+        maven 'maven3'
+    }
+
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
+    }
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                checkout(
+                    changelog: false,
+                    poll: false,
+                    scm: [
+                        $class: 'GitSCM',
+                        branches: [[name: '*/main']],
+                        userRemoteConfigs: [[url: 'https://github.com/ravi11196/Petclinic-New.git']]
+                    ]
+                )
+            }
+        }
+
+        stage('Code Compile') {
+            steps {
+                script {
+                    sh 'mvn clean compile'
+                }
+            }
+        }
+
+        stage('Unit Test') {
+            steps {
+                script {
+                    sh 'mvn test'
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    sh """
+                    ${SCANNER_HOME}/bin/sonar-scanner \\
+                      -Dsonar.projectKey=scoreme \\
+                      -Dsonar.sources=. \\
+                      -Dsonar.host.url=http://52.66.205.56:9000/ \\
+                      -Dsonar.login=squ_9c79d99c9ea13414046bb5436fa9201c2db1a755 \\
+                      -Dsonar.java.binaries=target/classes \\
+                      -X
+                    """
+                }
+            }
+        }
+
+        stage('OWASP Dependency Check') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./ --format HTML ', odcInstallation: 'DP-Check'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'mvn clean install'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Build succeeded'
+        }
+        failure {
+            echo 'Build failed'
+        }
+    }
+}
+
